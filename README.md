@@ -18,3 +18,10 @@ Eg, migration command from pakage manager console
 -------
 
 Thank you !
+
+Scheme 
+![Image of Scheme ](https://github.com/meoti/ContactAPI/blob/main/API%20DB%20Schema.PNG)
+
+Swagger UI
+
+![Image of Swagger UI ](https://github.com/meoti/ContactAPI/blob/main/ContactsAPI.PNG)
