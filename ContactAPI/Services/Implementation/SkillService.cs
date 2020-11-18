@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Security.Claims;
 using System.Threading.Tasks;
+using System.Transactions;
 
 using ContactAPI.Data.Models;
 using ContactAPI.Data.Repository;
@@ -67,41 +68,36 @@ namespace ContactAPI.Services.Implementation
             IEnumerable<Claim> claims = _httpContextAccessor.HttpContext.User.Claims;
             Skill skillExist = await SkillExisting(skill);
             ContactSkill contactSkill = skill.Contacts.FirstOrDefault();
-            ContactSkill TempContactSkill = (ContactSkill) contactSkill.Clone();
 
-            _repositoryWrapper.ContactSkills.Delete(contactSkill);
-            await _repositoryWrapper.SaveAsync();
-
-            contactSkill.InsertDBDateTrackingInfo(claims);
-            if ( skillExist == null )
+            using (
+                TransactionScope transaction = new TransactionScope(TransactionScopeOption.RequiresNew,
+                new TransactionOptions { IsolationLevel = IsolationLevel.ReadCommitted },
+                TransactionScopeAsyncFlowOption.Enabled)
+            )
             {
-                skill.Id = Guid.NewGuid();
-                contactSkill.SkillId = skill.Id;
-                _repositoryWrapper.Skills.Create(skill);
-            }
-            else
-            {
-                contactSkill.SkillId = skillExist.Id;
-                contactSkill.Skill = null;
-                contactSkill.Contact = null;
-            }
-
-            _repositoryWrapper.ContactSkills.Create(contactSkill);
-
-            try
-            {
+                _repositoryWrapper.ContactSkills.Delete(contactSkill);
                 await _repositoryWrapper.SaveAsync();
-            }
-            catch ( DbUpdateException )
-            {
-                TempContactSkill.Contact = null;
-                TempContactSkill.Skill = null;
-                _repositoryWrapper.ContactSkills.Create(TempContactSkill); // possible dirty data here
-                await _repositoryWrapper.SaveAsync();
-                throw;
-            }
 
-            await _repositoryWrapper.SaveAsync();
+                contactSkill.InsertDBDateTrackingInfo(claims);
+                if ( skillExist == null )
+                {
+                    skill.Id = Guid.NewGuid();
+                    skill.Contacts = null;
+                    _repositoryWrapper.Skills.Create(skill);
+                    contactSkill.SkillId = skill.Id;
+                }
+                else
+                {
+                    contactSkill.SkillId = skillExist.Id;
+                    contactSkill.Skill = null;
+                    contactSkill.Contact = null;
+                }
+
+                _repositoryWrapper.ContactSkills.Create(contactSkill);
+                await _repositoryWrapper.SaveAsync();
+
+                transaction.Complete();
+            }
 
             results.Value = skill;
             results.Succeded = true;
